@@ -51,7 +51,7 @@ circunferência das árvores ao longo do tempo, usando a biblioteca
     ## Call `lifecycle::last_lifecycle_warnings()` to see where this warning was
     ## generated.
 
-![](TidyModels---Replicação-1---Correlation-and-regression-fundamentals-with-tidy-data-principles_files/figure-gfm/Gráfico%20da%20Correlação-1.png)<!-- -->
+![](Imagens/Gráfico_da_correlação-1.png)<!-- -->
 
 Assim, vemos que, assim como esperado, a circunferência das árvores
 aumentou conforme sua idade aumentou. Além do gráfico, podemos também
