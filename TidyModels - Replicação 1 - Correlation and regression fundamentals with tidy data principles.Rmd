@@ -1,0 +1,211 @@
+---
+title: "TidyModels - Correlation and regression fundamentals with tidy data principles"
+author: "Philipe Dias"
+date: "2024-11-19"
+output: github_document
+---
+
+# Replicação de um dos exemplos de ensino do site tidymodels.org, mostrando os fundamentos de análises de correlação e de regressão
+
+## 1. Análise de Correlação
+
+Primeiro, fazendo uma análise prévia da base Orange, tornando-a uma base *tibble*:
+
+```{r Baixar biblioteca, include = FALSE}
+# install.packages('tidymodels')
+library(tidymodels)
+```
+```{r Base de Dados}
+
+data(Orange)
+
+Orange <- as_tibble(Orange)
+
+head(Orange)
+
+```
+A base, portanto, possui informações de diferentes árvores em diferentes idades e, com cada idade, uma circunferência diferente. Sabendo que, conforme a árvore cresce, sua circunferência também, pode-se fazer uma **análise da correlação** entre os dois:
+
+```{r Análise de Correlação, include = TRUE}
+
+corr <- cor(Orange$age, Orange$circumference)
+paste('Correlação entre a idade da árvore e sua circunferência é de', corr)
+
+```
+
+Para evidenciar ainda mais, é possível fazer um gráfico da trajetória da circunferência das árvores ao longo do tempo, usando a biblioteca *ggplot*:
+
+```{r Gráfico da Correlação, echo = FALSE}
+library(ggplot2)
+
+ggplot(Orange, aes(age, circumference, color = Tree)) +
+  geom_line(size = 0.8) +
+  theme_bw() +
+  theme(legend.position = 'top')
+  
+```
+
+Assim, vemos que, assim como esperado, a circunferência das árvores aumentou conforme sua idade aumentou. Além do gráfico, podemos também usar uma tabela para ver a correlação da circunferência de cada árvore com sua idade:
+
+```{r Tabela de Correlação}
+
+Orange |> 
+  group_by(Tree) |> 
+  summarize(Correlação = cor(age, circumference))
+
+```
+
+Como é possível ver, a correlação de cada árvore é maior do que a correlação de todos os valores agregados.
+
+### Teste de Hipótese Geral
+
+Além de só estimar a correlação, também podemos fazer um teste de hipótese, em que a hipótese nula é de que *a correlação é igual a 0* e a hipótese alternativa indica que ela é *diferente de 0*, a partir do comando *cor.test()*. O teste utilizado é o **teste de hipótese para o coeficiente de correlação de Pearson**, que mede a correlação linear de duas variáveis a partir dos valores observados e das médias das duas variáveis em questão, que, no caso, são a idade e circunferência da árvore. Para organizar o resultado, também foi utilizado o comando *tidy()*, que apresenta-os de forma mais limpa e visual:
+
+```{r Teste de Hipótese e Output}
+
+teste <- cor.test(Orange$age, Orange$circumference)
+
+tidy(teste)
+
+```
+
+### Teste de Hipótese para cada árvore + *Nest-Map-Unnest Workflow*
+
+Com o objetivo de fazer mais de um teste de hipótese, sendo um para cada uma das 5 árvores, podemos, primeiro, compilar as informações de cada árvore em uma base *nested*:
+
+```{r Base nested}
+
+nested <- Orange |> 
+  nest(dados = c(age, circumference))
+
+print(nested)
+
+```
+
+Agora, todas as informações de idade e circunferência de cada árvore estão coletadas na coluna *dados*, separadas pelo número de cada uma. Podemos, então realizar o teste de hipótese com cada conjunto de dados, a partir do comando *map()*:
+
+```{r Teste Múltiplo}
+
+nested_teste <-  nested |> 
+  mutate(teste = map(dados, ~ cor.test(.x$age, .x$circumference)))
+
+print(nested_teste)
+
+```
+
+O comando *map()* serve para **aplicar uma função, de forma iterada, a cada elemento de uma lista ou coluna**. Os *.x\$* utilizados antes de chamar as informações de idade e circunferência são utilizados uma vez que, para o comando, é necessário especificar, dentro da lista de *data frames* que é a coluna *dados*, quais que serão utilizados para executar a função.
+
+Além disso, podemos também tornar os dados mais visualizáveis utilizando o *tidy()*, que também pode ser iterado para cada teste usando o *map()*:
+
+```{r Usando tidy na base nested}
+
+nested_teste_tidy <- nested_teste |>  
+  mutate(
+    tidied = map(teste, tidy)
+  )
+
+print(nested_teste_tidy)
+
+```
+
+Dessa forma, com o teste feito para todas as árvores e visualizável, é possível então realizar o processo de *unnesting* e, assim, expandir as colunas para que as informações contidas dentro delas se tornem de fato visualizáveis, a do comando *unnest()*, e selecionando as informações que queremos a partir do *select()*:
+
+```{r Unnest}
+
+nested_teste_tidy |> 
+  unnest(cols = tidied) |> 
+  select(-dados, -teste)
+
+```
+
+O comum é realizar todos estes passos em uma única sequência de código, devido à facilidade do *pipe*, \|\>. **O código completo, portanto, ficaria assim**:
+
+```{r Código Completo}
+
+Orange |> 
+  nest(dados = c(age, circumference)) |> 
+  mutate(
+    teste = map(dados, ~ cor.test(.x$age, .x$circumference)),
+    tidied = map(teste, tidy)
+  ) |> 
+  unnest(cols = tidied) |> 
+  select(-dados, -teste)
+
+```
+
+## 2. Modelos de Regressão
+
+### 2.1. Regressão Simples
+
+O *workflow* utilizado para os testes de hipótese individuais também pode ser replicado para regressões. Fazendo a regressão linear da idade da árvore em relação ao seu comprimento e depois arrumando os resultados com o comando *tidy()*, temos:
+
+```{r Regressão Simples}
+
+reg <- lm(age ~ circumference, data = Orange)
+summary(reg)
+
+tidy(reg)
+```
+
+Agora sim, pensando em fazer regressões individuais para cada árvore, podemos utilizar o mesmo processo de antes:
+
+```{r Regressões individuais com Workflow}
+
+Orange |> 
+  nest(data = c(-Tree)) |> 
+  mutate(
+    regs = map(data, ~ lm(age ~ circumference, data = .x)),
+    tidied = map(regs, tidy)
+  ) |> 
+  unnest(tidied) |> 
+  select(-data, -regs)
+
+```
+
+### 2.2. Regressão Múltipla
+
+É possível utilizar a mesma metodologia para regressões múltiplas. Utilizando outra base criada já dentro do R, *mtcars*, vamos transformá-la em *tibble*, criar dados *nested* diferenciando carros mecânicos e manuais, e então fazer a regressão múltipla com a coluna *wt* como variável resposta, definidos pela coluna *am*:
+
+```{r Base mtcars + Regressões Múltiplas}
+
+data(mtcars)
+mtcars <- as_tibble(mtcars)
+
+
+mtcars |> 
+  nest(data = c(-am)) |> 
+  mutate(
+    regs = map(data, ~ lm(wt ~ mpg + qsec + gear, data = .x)),
+    tidied = map(regs, tidy)
+  ) |> 
+  unnest(tidied) |> 
+  select(-data, -regs)
+
+```
+
+Além do comando *tidy()*, também existem os comandos *glanced()* e *augmented()* para melhor organizar os resultados de modelos estatísticos, cada um com suas particularidades. Enquanto o primeiro dos três foca em tornar fácil a análise de significância, providenciando os parâmetros do modelo, o segundo busca ajudar na análise da qualidade geral da regressão, entregando informações mais específicas como $R^2$ e a estatística F. Por fim, o terceiro, além de entregar as informações do modelo, adiciona-as aos dados que a base original já possuía, a fim de facilitar a realização de gráficos e outras análises visuais. Podemos utilizar os três pelo mesmo método realizado acima:
+
+```{r tidy, glanced e augmented}
+
+regs_organizadas <- mtcars |> 
+  nest(dados = c(-am)) |> 
+  mutate(
+    regs = map(dados, ~ lm(wt ~ mpg + qsec + gear, data = .x)),
+    tidied = map(regs, tidy),
+    glanced = map(regs, glance),
+    augmented = map(regs, augment)
+  )
+  
+regs_organizadas |> 
+  select(tidied) |> 
+  unnest(tidied)
+
+regs_organizadas |> 
+  select(glanced) |> 
+  unnest(glanced)
+
+regs_organizadas |> 
+  select(augmented) |> 
+  unnest(augmented)
+
+```
