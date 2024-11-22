@@ -19,7 +19,7 @@ ggplot(mtcars, aes(mpg, wt)) +
   theme_bw()
 ```
 
-![](TidyModels---Replicação-2---Bootstrap-resampling-and-tidy-regression-models_files/figure-gfm/Gráfico%20e%20Regressão-1.png)<!-- -->
+![](Imagens/Gráfico_e_Regressão-2.png)<!-- -->
 
 ``` r
 regnl <- nls(mpg ~ k / wt + b, mtcars, start = list(k = 1, b = 0))
@@ -69,7 +69,7 @@ ggplot(mtcars, aes(wt,mpg)) +
   theme_bw()
 ```
 
-![](TidyModels---Replicação-2---Bootstrap-resampling-and-tidy-regression-models_files/figure-gfm/Modelo%20+%20Dados%20em%20Gráfico-1.png)<!-- -->
+![](Imagens/Modelo+Dados_em_Gráfico-2.png)<!-- -->
 
 Pelo gráfico, vemos que o modelo estimado se aproxima da distribuição
 dos pontos da base de dados. Porém, dado que ele foi construído e
@@ -189,7 +189,7 @@ ggplot(boot_resultados, aes(estimate)) +
   theme_bw()
 ```
 
-![](TidyModels---Replicação-2---Bootstrap-resampling-and-tidy-regression-models_files/figure-gfm/Intervalo%20de%20Confiança%20-%20Infos%20+%20Histograma-1.png)<!-- -->
+![](Imagens/Intervalo_de_Confiança-Infos+Histograma-2.png)<!-- -->
 
 No código do histograma, o parâmetro *bins* dentro de *geom_histogram()*
 controla o número de **faixas** de cada histograma, enquanto o comando
@@ -241,7 +241,7 @@ ggplot(boot_augmented, aes(wt, mpg)) +
   theme_bw()
 ```
 
-![](TidyModels---Replicação-2---Bootstrap-resampling-and-tidy-regression-models_files/figure-gfm/Fit%20dos%20Modelos%20-%20Valores%20+%20Gráfico-1.png)<!-- -->
+![](Imagens/Fit_dos_Modelos-Valores+Gráfico-2.png)<!-- -->
 
 Para criar o gráfico, dentro de *geom_line()*, explicitamos que a
 variável que deverá ser utilizada para formar as curvas é *.fitted*, com
@@ -299,7 +299,7 @@ ggplot(splines_aug, aes(x, y)) +
   theme_bw()
 ```
 
-![](TidyModels---Replicação-2---Bootstrap-resampling-and-tidy-regression-models_files/figure-gfm/Workflow%20com%20Modelo%20Diferente-1.png)<!-- -->
+![](Imagens/Workflow_com_Modelo_Diferente-2.png)<!-- -->
 
 Diferente da regressão, o spline suavizado **cria uma curva mais
 ajustada ao longo do tempo**, ao invés de forçar uma relação específica,
