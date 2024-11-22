@@ -1,0 +1,154 @@
+---
+title: "TidyModels - Bootstrap resampling and tidy regression models"
+author: "Philipe Dias"
+date: "2024-11-21"
+output: github_document 
+output_dir: 'C:\Users\phili\Documents\Importante\Pessoal\R - Estudo'
+---
+
+# Replicação de um dos exemplos de ensino do site tidymodels.org, que demonstra a execução do método de *bootstraping* em um modelo de regressão não linear
+
+```{r Biblioteca, echo = FALSE, include = FALSE}
+
+library(tidymodels)
+
+```
+
+## 1. Modelos de Regressão
+
+Utilizando a base inclusa no R base *mtcars*, primeiro analisamos a distribuição de pontos entre peso (*wt*) e quilômetros rodados (*mpg*) dos carros presentes nos dados, para então utilizar um modelo de **mínimos quadrados não lineares** para analisar o efeito do peso sobre o número de quilômetros rodados:
+
+```{r Gráfico e Regressão}
+
+ggplot(mtcars, aes(mpg, wt)) +
+  geom_point() +
+  theme_bw()
+
+regnl <- nls(mpg ~ k / wt + b, mtcars, start = list(k = 1, b = 0))
+summary(regnl)
+tidy(regnl)
+```
+
+O método de MQNL é semelhante ao mais utilizado para regressões lineares, **mínimos quadrados ordinários (MQO)**. Os dois buscam minimizar a soma dos quadrados do resíduo, porém, enquanto MQO é utilizado para combinações lineares, o MQNL serve para parâmetros não lineares, como aparenta ser a relação entre *mpg* e *wt*. Observando pelo p-valor encontrado, tanto o parâmetro *k* quanto *b* são estatísticamente relevantes.
+
+Para melhor visualizar, plotamos a relação predita pelo modelo junto com os dados, como no gráfico anterior:
+
+```{r Modelo + Dados em Gráfico}
+
+ggplot(mtcars, aes(wt,mpg)) +
+  geom_point() +
+  geom_line(aes(y = predict(regnl))) +
+  theme_bw()
+
+```
+
+Pelo gráfico, vemos que o modelo estimado se aproxima da distribuição dos pontos da base de dados. Porém, dado que ele foi construído e testado com somente um conjunto de dados, é possível que, se aplicado à outra base semelhante, o modelo não se ajuste bem, tornando-o ineficiente. É aí que entra o **Bootstrap**
+
+## 2. Modelos de *Bootstrap*
+
+A fim de tornar os modelos criados eficientes para analisar diversas bases de dados com informações diferentes, o *bootstrap* **seleciona, aleatoriamente, amostras de uma base de dados (com reposição)**, de forma que a variação dos resultados estimados por cada amostra se aproxima da variância da própria estimativa inicial. Dessa forma, é possível criar um **intervalo de confiança** da estimativa do modelo utilizado.
+
+Para fazer isso com a regressão não linear criada anteriormente, primeiro precisamos dividir a base em réplicas aleatórias com reposição. Para isso, podemos utilizar o comando *bootstraps()*:
+
+```{r Bootstrapping}
+
+set.seed(27)
+
+boots <- bootstraps(mtcars, times = 2000, apparent = TRUE)
+boots
+
+```
+
+Agora, realizamos 2000 iterações de *bootstrapping* com a base *mtcars*, dividindo as amostras entre os **dados de treinamento**, os quais serão utilizados para construir a regressão, e os **dados de teste**, que serão responsáveis por mostrar e o modelo se encaixa bem a um novo conjunto de dados.
+
+Para aplicar a regressão em cada amostra, podemos criar uma função que, repetidamente, passe por cada coluna e devolva os parâmetros encontrados por base de dados, o que pode ser facilitado pelo comando *map()*, que será responsável pela iteração da regressão. A fim de observar melhor os dados, é possível utilizar o comando *tidy()* em conjunto com *map()*, que organizará os parâmetros. Por fim, para observar essas informações, precisaremos utilizar a função *unnest()*, que tornará a coluna de informações da regressão, inicialmente uma lista, em diversas colunas, uma com cada informação relevante:
+
+```{r Função de Regressão + Aplicação e Unnesting}
+
+reg_nls_para_bootstrap <- function(split) {
+  nls(mpg ~ k / wt + b, analysis(split), start = list(k = 1, b = 0))
+}
+
+boots_com_modelo <- boots |> 
+  mutate(
+    modelo = map(splits, reg_nls_para_bootstrap),
+    tidied = map(modelo, tidy)
+  )
+
+boot_resultados <- boots_com_modelo |> 
+  unnest(tidied)
+
+boot_resultados
+```
+
+Assim, com os coeficientes da regressão de cada uma das amostras, é possível criar um **intervalo de confiança** para os valores dos parâmetros, utilizando o **método dos percentis**, comumente utilizado para intervalos criados a partir de amostras de *bootstrap*, tanto a partir do comando *int_pctl()*, quanto visualmente a partir de histogramas:
+
+```{r Intervalo de Confiança - Infos + Histograma}
+
+ic_percentis <- int_pctl(boots_com_modelo, tidied)
+ic_percentis
+
+ggplot(boot_resultados, aes(estimate)) +
+  geom_histogram(bins = 30) +
+  facet_wrap( ~ term, scales = 'free') +
+  geom_vline(aes(xintercept = .lower), data = ic_percentis, col = 'darkblue') +
+  geom_vline(aes(xintercept = .upper), data = ic_percentis, col = 'darkblue') +
+  theme_bw()
+```
+
+No código do histograma, o parâmetro *bins* dentro de *geom_histogram()* controla o número de **faixas** de cada histograma, enquanto o comando *facet_wrap()* possibilita a criação de *subplots*, ou seja, de mais de um gráfico no mesmo espaço, subdivididos pelo *term*, ou seja, pelos parâmetros do modelo de regressão, $b$ e $k$, e com possibilidade de terem diferentes escalas no eixo x, dado pelo parâmetro *scales*. Ele também cria duas linhas verticais em cada histograma, baseadas nos limites inferior e superior, definidos pelo comando *int_pctl*, a partir do comando *geom_vline()*.
+
+## 3. Visualização do *fit* do Modelo
+
+Para analisar melhor como os modelos se encaixaram nos dados de cada _bootstrap_, podemos utilizar o comando _augment()_. Como são muitas amostras, pegaremos somente 200 como exemplos, tanto a partir de seus valores quanto a partir do gráfico que mostre todas as curvas sobre os pontos da base:
+```{r Fit dos Modelos - Valores + Gráfico}
+
+boot_augmented <- boots_com_modelo |> 
+  sample_n(200) |> 
+  mutate(
+    augmented = map(modelo, augment)
+  ) |> 
+  unnest(augmented)
+boot_augmented
+
+ggplot(boot_augmented, aes(wt, mpg)) +
+  geom_line(aes(y = .fitted, group = id), alpha = .2, col = 'red') +
+  geom_point() +
+  theme_bw()
+
+```
+
+Para criar o gráfico, dentro de _geom_line()_, explicitamos que a variável que deverá ser utilizada para formar as curvas é _.fitted_, com os valores de ajuste de cada modelo, e que, para cada _id_, ou seja, cada amostra de _bootstrap_, uma nova curva deve ser criada.
+
+## 4. Extrapolação para mais Modelos
+
+Utilizamos a visualização do ajuste do modelo para regressões não lineares, porém também podemos generalizar tal processo. Por exemplo, se fosse escolhido utilizar o método de **spline cúbico suavizado**, também muito utilizado para relações não lineares, a partir do comando _smooth.spline()_, o processo completo ficaria parecido:
+```{r Workflow com Modelo Diferente}
+
+ajuste_spline = function(split) {
+  dados = analysis(split)
+  smooth.spline(dados$wt, dados$mpg, df = 4)
+}
+
+boot_spline <- boots |> 
+  sample_n(200) |> 
+  mutate(
+    spline = map(splits, ajuste_spline),
+    aug_spline = map(spline, augment)
+  )
+
+splines_aug <- 
+  boot_spline |> 
+  unnest(aug_spline)
+
+splines_aug
+
+ggplot(splines_aug, aes(x, y)) +
+  geom_line(aes(y = .fitted, group = id), alpha = 0.2, col = 'blue') +
+  geom_point() +
+  labs(x = 'wt', y = 'mpg') +
+  theme_bw()
+
+```
+
+Diferente da regressão, o spline suavizado **cria uma curva mais ajustada ao longo do tempo**, ao invés de forçar uma relação específica, como o método de mínimos quadrados não lineares.
